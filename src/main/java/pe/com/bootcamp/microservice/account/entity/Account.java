@@ -25,7 +25,7 @@ public class Account {
 	private String id;
 	private String typeAccount; //tipo de cuenta
 	private Double minOpeningAmount; //monto minimo de apertura
-
+	private Double profileAccount; //personal- empresarial
 	private String numAccount; //numero de cuenta
 	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
 	private Date openingDate; //fecha apertura

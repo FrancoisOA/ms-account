@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 public class WebclientConfig {
 	private final WebClient.Builder builder = WebClient.builder();
 
-	public Flux<Customer> getCustomer() {
+	public Flux<Customer> getCustomers() {
 		return builder.build().get().uri("http://localhost:8080/customers").retrieve()
 				.bodyToFlux(Customer.class);
 	}

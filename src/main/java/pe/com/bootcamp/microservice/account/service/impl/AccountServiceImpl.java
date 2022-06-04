@@ -6,11 +6,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import pe.com.bootcamp.microservice.account.config.WebclientConfig;
 import pe.com.bootcamp.microservice.account.entity.Account;
+import pe.com.bootcamp.microservice.account.model.CreditCard;
 import pe.com.bootcamp.microservice.account.model.Customer;
 import pe.com.bootcamp.microservice.account.repository.IAccountRepository;
 import pe.com.bootcamp.microservice.account.service.AccountService;
@@ -27,45 +27,35 @@ public class AccountServiceImpl implements AccountService {
 
 	private final WebclientConfig webclient = new WebclientConfig();
 
-	@Override
-	public Flux<Account> findAll() {
-		log.info("Listar cuentas");
-		return accountRepo.findAll();
-	}
-
-	@Override
-	public Mono<Account> findById(String id) {
-		log.info("Buscar cuenta");
-		return accountRepo.findById(id);
-	}
 
 	@Override
 	public Mono<Account> saveSavingAccount(Account account, String numCreditCard) {
 		log.info("Opcion cuenta ahorro");
-		Mono<Customer> customer = webclient.getCustomerById(account.getIdCustomer());
+		Mono<Customer> customer = webclient.getCustomerById(account.getIdCustomer()); //Llama al microservicio de cliente, trae un registro de customer mediante su idCustomer en el form
 		return customer
-				.filter(c -> (c.getProfile().equals("VIP") && accountRepo.findByIdCustomer(c.getId()) == null
-						&& webclient.getCreditCardByNum(numCreditCard) != null))
-				.flatMap(o -> this.save(account))
+				.filter(c -> accountRepo.findByIdCustomer(c.getDocumentNumber()) == null) //Valida que en DBAccount no exista el idCustomer hallado en el webclient de customers
+				.flatMap(o -> o.getProfile().equals("VIP") && this.getCreditCardByNum(numCreditCard)!=null && this.getDebtCustomerById(numCreditCard)==null ? this.save(account): Mono.empty())
 				.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NO_CONTENT)));
 	}
+
 
 	@Override
 	public Mono<Account> saveCurrentAccount(Account account, String numCreditCard) {
 		log.info("Opcion cuenta corriente");
 		Mono<Customer> customer = webclient.getCustomerById(account.getIdCustomer());
-		return customer.filter(c -> ((c.getTypeCustomer().equals("PERSONAL")
-				&& accountRepo.findByIdCustomer(account.getIdCustomer()).equals(""))
-				|| (c.getTypeCustomer().equals("EMPRESARIAL") && webclient.getCreditCardByNum(numCreditCard) != null)))
-				.flatMap(o -> this.save(account)
-						.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NO_CONTENT))));
+		return customer
+				.filter(c -> (c.getTypeCustomer().equals("PERSONAL") && accountRepo.findByIdCustomer(c.getDocumentNumber())==null)||c.getTypeCustomer().equals("EMPRESARIAL"))
+				.flatMap(o -> this.getCreditCardByNum(numCreditCard)!=null && this.getDebtCustomerById(numCreditCard)==null ? this.save(account) : Mono.empty())
+				.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NO_CONTENT)));
 	}
 
 	@Override
 	public Mono<Account> saveFixedTerm(Account account) {
 		log.info("Opcion cuenta plazo fijo");
 		Mono<Customer> customer = webclient.getCustomerById(account.getIdCustomer());
-		return customer.filter(c -> c.getProfile().equals("personal")).flatMap(o -> this.save(account))
+		return customer
+				.filter(c -> c.getProfile().equals("PERSONAL"))
+				.flatMap(o -> this.save(account))
 				.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NO_CONTENT)));
 	}
 
@@ -117,5 +107,32 @@ public class AccountServiceImpl implements AccountService {
 			return accountRepo.save(o);
 		});
 	}
+	
+	@Override
+	public Mono<Account> findById(String id) {
+		log.info("Buscar cuenta");
+		return accountRepo.findById(id);
+	}
+	
+	@Override
+	public Flux<Customer> getCustomers() {
+		return webclient.getCustomers();
+	}
 
+	@Override
+	public Mono<Customer> getCustomerById(String id) {
+		return webclient.getCustomerById(id);
+	}
+	
+	@Override
+	public Mono<CreditCard> getCreditCardByNum(String numCreditCard) {
+		log.info("Validando existencia de tarjeta de credito por numero");
+		return webclient.getCreditCardByNum(numCreditCard);
+	}
+
+	@Override
+	public Mono<CreditCard> getDebtCustomerById(String idCustomer) {
+		log.info("Verificando deudas pendientes de cliente");
+		return webclient.getDebtCustomerById(idCustomer);
+	}
 }
